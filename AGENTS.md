@@ -9,8 +9,6 @@ Issue가 필요한 작업은 Issue 생성 → Issue 계획 작성 → 별도 에
 
 코드의 의도·맥락 또는 변경 영향을 조사해 달라는 요청에는 git-history를 사용한다. 조사 결과와 근거를 설명하고, 구현은 승인된 범위에서 기존 워크플로우로 진행한다.
 
-- 작업 단위·경미한 정합성 보완의 Issue 예외·후속 보고는 공통 기준(`skills/git-workflow/references/outcome-scope.md`)을 읽고 따른다.
-
 ## 브랜치 전략
 
 브랜치 생성·PR 대상 결정·hotfix 작업 전에 [README.md 의 브랜치 전략](README.md#브랜치-전략)을 읽고 따른다. Issue 생성·릴리즈 전에는 [README.md 의 마일스톤](README.md#마일스톤)을 읽는다.
@@ -21,7 +19,7 @@ Issue가 필요한 작업은 Issue 생성 → Issue 계획 작성 → 별도 에
 hooks/·types/·.claude-plugin/ 을 바꾼 변경을 설치본에 반영할 때 이 순서를 따른다.
 
 1. `.claude-plugin/plugin.json` 의 `version` 을 올린다 (예: `0.1.0` → `0.2.0`). 버전이 같으면 `claude plugin update` 가 갱신을 건너뛸 수 있다.
-2. marketplace 를 다시 읽는다.
+2. 변경이 `main` 에 머지된 뒤 marketplace 를 다시 읽는다.
 
    ```bash
    claude plugin marketplace update session-map-mods
