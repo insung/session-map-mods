@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { FlowNode, HostSession, SessionEntry } from '../types'
-import { STATUS_LABEL, STATUS_MARK, flowSvg, layoutFlow, projects, toNodes } from './graph'
+import type { FlowNode, HostGroup, HostSession, PaneTab, SessionEntry } from '../types'
+import { STATUS_LABEL, STATUS_MARK, flowSvg, layoutFlow, sections, tasks, toNodes } from './graph'
+import { mergeRefs, refLabel, refsOfGhCommand, repoOfRemote } from './refs'
 
 const PANE = 'session-map'
 const TOOL = 'register_session'
@@ -16,8 +17,15 @@ const HOST_LIMIT = 200
 const sessions = atom({ plugin: 'session-map', key: 'sessions' } as const, [] as SessionEntry[])
 const hostSessions = atom({ plugin: 'session-map', key: 'hostSessions' } as const, [] as HostSession[])
 const selfId = atom({ plugin: 'session-map', key: 'selfId' } as const, '')
+const hostGroups = atom({ plugin: 'session-map', key: 'hostGroups' } as const, [] as HostGroup[])
 const selfHostId = atom({ plugin: 'session-map', key: 'selfHostId' } as const, '')
+const tab = atom({ plugin: 'session-map', key: 'tab' } as const, 'sections' as PaneTab)
 const openProject = atom({ plugin: 'session-map', key: 'project' } as const, '')
+
+const TABS: { id: PaneTab; label: string }[] = [
+  { id: 'sections', label: '섹션 목록' },
+  { id: 'tasks', label: '작업 목록' },
+]
 
 let dir = ''
 let self: SessionEntry | undefined
@@ -38,7 +46,7 @@ async function readEntry($: EngineInterface, path: string): Promise<SessionEntry
   try {
     const text = await $.fs.read(path)
     const entry = JSON.parse(typeof text === 'string' ? text : '') as SessionEntry
-    return { ...entry, hostId: entry.hostId ?? '', now: entry.now ?? '', relatedIds: entry.relatedIds ?? [] }
+    return { ...entry, hostId: entry.hostId ?? '', now: entry.now ?? '', relatedIds: entry.relatedIds ?? [], refs: entry.refs ?? [] }
   } catch {
     return undefined
   }
@@ -92,6 +100,9 @@ async function refreshHost($: EngineInterface): Promise<void> {
       list.push({ ...me, startedBy: me.startedBy ?? me.parentSessionId })
     }
     await update($, hostSessions, () => list)
+    // 그룹 순서는 섹션 목록의 순서에만 쓰므로, 읽지 못해도 세션 목록은 그대로 둔다
+    const groups = toolJson(await $.tool.call({ tool: 'mcp__ccd_sidebar__list_groups' } as never).catch(() => undefined))
+    if (Array.isArray(groups)) await update($, hostGroups, () => groups as HostGroup[])
   } catch {
     hasHostTools = false
   }
@@ -137,7 +148,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'session-map',
-      description: '프로젝트(사이드바 그룹)별로 세션의 플로우를 보여 주는 패널을 연다',
+      description: '섹션(사이드바 그룹)별·작업별로 세션의 플로우를 보여 주는 패널을 연다',
     })
     await $.tool.register({
       name: TOOL,
@@ -170,6 +181,7 @@ export const register: Register = on => {
       now: before?.now ?? '',
       parentId: before?.parentId ?? '',
       relatedIds: before?.relatedIds ?? [],
+      refs: before?.refs ?? [],
       cwd: await $.session.cwd(),
       startedAt: before?.startedAt ?? now,
       lastSeen: now,
@@ -213,6 +225,20 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // gh issue|pr 쓰기 명령으로 다룬 이슈·PR 을 이 세션의 기록에 남긴다
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (!self || !/\bgh\s+(issue|pr)\b/.test(e.command)) return ran
+    try {
+      const repo = await $.session.repo().catch(() => null)
+      const found = refsOfGhCommand(e.command, JSON.stringify(ran), repoOfRemote(repo?.remote ?? ''))
+      if (found.length) await writeSelf($, { refs: mergeRefs(self.refs, found) })
+    } catch {
+      // 기록하지 못해도 명령 결과는 그대로 돌려준다
+    }
+    return ran
+  })
+
   on('tool.call', { tool: `mcp__session-map__${TOOL}` }, async ($, e) => {
     if (!self) return { result: '세션이 아직 등록되지 않았다.' }
     const input = e as unknown as { title?: unknown; purpose?: unknown; parentId?: unknown; relatedId?: unknown }
@@ -244,17 +270,40 @@ export const register: Register = on => {
     const entries = await read($, sessions)
     const hosts = await read($, hostSessions)
     const selfKey = (await read($, selfHostId)) || (await read($, selfId))
+    const groups = await read($, hostGroups)
+    const current = await read($, tab)
     const project = await read($, openProject)
     const nodes = toNodes(entries, hosts, Date.now())
+    const taskList = tasks(nodes)
+    const pick = (name: string) => () => void update($, openProject, () => name)
 
-    if (!project) {
-      const rows = projects(nodes)
+    const tabBar = (
+      <Box key="tabs" flexDirection="row" gap={2}>
+        {TABS.map(one => (
+          <Button
+            key={`tab-${one.id}`}
+            plain
+            onPress={() => {
+              void update($, tab, () => one.id)
+              void update($, openProject, () => '')
+            }}
+          >
+            {one.id === current ? <Text bold underline>{one.label}</Text> : <Text dimColor>{one.label}</Text>}
+          </Button>
+        ))}
+      </Box>
+    )
+    const refsText = (list: FlowNode['refs']) => list.map(refLabel).join(' · ')
+
+    if (!project && current === 'sections') {
+      const rows = sections(nodes, groups)
       return (
         <Box flexDirection="column">
-          <Text dimColor>프로젝트 {rows.length}개 · 누르면 세션 플로우를 연다</Text>
+          {tabBar}
+          <Text dimColor>섹션 {rows.length}개 · 왼쪽 사이드바 순서 · 누르면 세션 플로우를 연다</Text>
           {rows.length === 0 && <Text dimColor>등록된 세션이 없다.</Text>}
           {rows.map(row => (
-            <Button key={`project-${row.name}`} plain onPress={() => void update($, openProject, () => row.name)}>
+            <Button key={`section-${row.name}`} plain onPress={pick(row.name)}>
               ▸ <Text bold>{row.name}</Text>
               <Text dimColor>
                 {'  '}세션 {row.total} · 진행 중 {row.running}
@@ -265,7 +314,32 @@ export const register: Register = on => {
       )
     }
 
-    const flow = layoutFlow(nodes, project)
+    if (!project) {
+      return (
+        <Box flexDirection="column">
+          {tabBar}
+          <Text dimColor>
+            작업 {taskList.length}개 · 시작 관계·곁가지·같은 이슈·PR 로 이어진 세션을 한 작업으로 묶는다
+          </Text>
+          {taskList.map(task => (
+            <Box key={`task-${task.id}`} flexDirection="column" marginTop={1}>
+              <Button key={`task-open-${task.id}`} plain onPress={pick(task.id)}>
+                ▸ <Text bold>{task.title}</Text>
+                <Text dimColor>
+                  {'  '}세션 {task.total} · 진행 중 {task.running} · 완료 {task.done}
+                </Text>
+              </Button>
+              <Text dimColor>   섹션: {task.sections.join(', ')}</Text>
+              {task.refs.length ? <Text dimColor>   {refsText(task.refs)}</Text> : ''}
+            </Box>
+          ))}
+        </Box>
+      )
+    }
+
+    const task = current === 'tasks' ? taskList.find(one => one.id === project) : undefined
+    const heading = task ? task.title : project
+    const flow = layoutFlow(nodes, task ? task.keys : project)
     const sessionRow = (node: FlowNode, external: boolean) => (
       <Box key={`node-${node.key}`} flexDirection="column" marginTop={1}>
         <Button key={`open-${node.key}`} plain onPress={() => void openSession($, node.link)}>
@@ -273,11 +347,12 @@ export const register: Register = on => {
           {node.key === selfKey ? <Text color="magenta"> (이 세션)</Text> : ''}
           <Text dimColor>
             {'  '}
-            {external ? `↗ ${node.project} · ` : ''}
+            {external ? '↗ ' : ''}
+            {external || task ? `${node.project} · ` : ''}
             {STATUS_LABEL[node.status]}
-            {node.pr ? ` · ${node.pr}` : ''}
           </Text>
         </Button>
+        {node.refs.length ? <Text dimColor>   {refsText(node.refs)}</Text> : ''}
         {node.purpose ? <Text dimColor>   목적: {node.purpose}</Text> : ''}
         {node.now ? <Text dimColor>   지금: {node.now}</Text> : ''}
       </Box>
@@ -285,12 +360,13 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Button key="back" plain onPress={() => void update($, openProject, () => '')}>
-          ◀ 프로젝트 목록
+        {tabBar}
+        <Button key="back" plain onPress={pick('')}>
+          ◀ {current === 'tasks' ? '작업 목록' : '섹션 목록'}
         </Button>
-        <Text bold>{project}</Text>
+        <Text bold>{heading}</Text>
         {Svg ? (
-          <Svg source={flowSvg(flow, selfKey)} alt={`${project} 세션 플로우`} isInteractive />
+          <Svg source={flowSvg(flow, selfKey, !!task)} alt={`${heading} 세션 플로우`} isInteractive />
         ) : (
           flow.placed.map(p => (
             <Text key={`tree-${p.node.key}`}>

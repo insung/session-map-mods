@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ENTRIES, HOSTS } from './fixtures'
+import { ENTRIES, GROUPS, HOSTS } from './fixtures'
 
 const PANE = {
   plugin: 'session-map',
@@ -31,6 +31,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], opened: string[])
   on('tool.call', (_, e) => {
     const call = e as { tool: string }
     if (call.tool === 'mcp__ccd_session_mgmt__list_sessions') return { result: { text: JSON.stringify(HOSTS.filter(one => one.sessionId !== 'local_c')) } }
+    if (call.tool === 'mcp__ccd_sidebar__list_groups') return { result: { text: JSON.stringify(GROUPS) } }
     if (call.tool === 'mcp__ccd_session_mgmt__get_session') return { result: { text: JSON.stringify(HOSTS.find(one => one.sessionId === 'local_c')) } }
     return { result: {} }
   })
@@ -65,5 +66,24 @@ test('the terminal draws the flow as text', async ($, on) => {
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press((await ui.find({ type: 'Button', text: /2610_커스텀-대시보드/ }))!)
   expect(await ui.find({ type: 'Text', text: /└─▶ ● AI 비용 추정/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the task tab groups sessions into tasks and opens one as a flow', async ($, on) => {
+  engine(on, [])
+  await $.session.start({ cwd: '/w/mi', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'session-map', args: '' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const sectionRows = await ui.findAll({ type: 'Button', text: /^▸/ })
+  expect(sectionRows.map(one => one.text?.split('  ')[0])).toEqual(['▸ 2610_blackbox-mods', '▸ 2610_커스텀-대시보드', '▸ 2610_mi.daily-report.batch'])
+
+  await ui.press((await ui.find({ type: 'Button', text: /작업 목록/ }))!)
+  const task = await ui.find({ type: 'Button', text: /커스텀 대시보드 기획 검토/ })
+  expect(task?.text).toContain('세션 4')
+  expect(await ui.find({ type: 'Text', text: /섹션: 2610_커스텀-대시보드, 2610_mi.daily-report.batch/ })).toBeDefined()
+  await ui.press(task!)
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Issue #33 · PR #47/ })).toBeDefined()
   await ui.unmount()
 })
