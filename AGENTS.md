@@ -15,3 +15,24 @@ Issue가 필요한 작업은 Issue 생성 → Issue 계획 작성 → 별도 에
 
 브랜치 생성·PR 대상 결정·hotfix 작업 전에 [README.md 의 브랜치 전략](README.md#브랜치-전략)을 읽고 따른다. Issue 생성·릴리즈 전에는 [README.md 의 마일스톤](README.md#마일스톤)을 읽는다.
 규칙이 충돌하거나 필요한 항목이 미정이면 관련 행동 전에 확인한다.
+
+## 갱신
+
+hooks/·types/·.claude-plugin/ 을 바꾼 변경을 설치본에 반영할 때 이 순서를 따른다.
+
+1. `.claude-plugin/plugin.json` 의 `version` 을 올린다 (예: `0.1.0` → `0.2.0`). 버전이 같으면 `claude plugin update` 가 갱신을 건너뛸 수 있다.
+2. marketplace 를 다시 읽는다.
+
+   ```bash
+   claude plugin marketplace update session-map-mods
+   ```
+
+3. 설치본을 새 버전으로 바꾼다.
+
+   ```bash
+   claude plugin update session-map@session-map-mods
+   ```
+
+4. 새 세션을 열고 `/session-map` 으로 패널이 바뀐 동작을 보이는지 확인한다. 이미 열린 세션에는 반영되지 않는다.
+
+버전 번호는 README.md 의 [마일스톤](README.md#마일스톤) 기준과 같게 `vX.Y.Z` 태그를 붙일 때의 번호로 쓴다.
