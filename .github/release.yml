@@ -1,0 +1,14 @@
+changelog:
+  categories:
+    - title: 기능·개선
+      labels: [enhancement, refactor, performance]
+    - title: 수정
+      labels: [bug]
+    - title: 설치·운영
+      labels: [deployment, ci]
+    - title: 릴리즈 준비
+      labels: [release]
+    - title: 문서·사용 안내
+      labels: [documentation]
+    - title: 기타 변경
+      labels: ["*"]
