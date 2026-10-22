@@ -126,10 +126,10 @@
 
 ### 설치
 
-로컬 marketplace 로 user scope 에 설치한다.
+GitHub 저장소 `insung/session-map-mods` 를 marketplace 로 추가하고 user scope 에 설치한다.
 
 ```bash
-claude plugin marketplace add ~/Documents/Github/my-workspace/session-map-mods
+claude plugin marketplace add insung/session-map-mods
 ```
 
 ```bash
@@ -140,7 +140,7 @@ claude plugin install session-map@session-map-mods --scope user
 
 ### 갱신
 
-`.claude-plugin/plugin.json` 의 `version` 을 올린 다음 아래 두 명령을 실행한다. 버전이 같으면 갱신하지 않을 수 있다.
+새 버전이 `main` 에 올라오면 아래 두 명령을 실행한다. `.claude-plugin/plugin.json` 의 `version` 이 같으면 갱신하지 않을 수 있다.
 
 ```bash
 claude plugin marketplace update session-map-mods
@@ -183,7 +183,7 @@ claude plugin uninstall session-map@session-map-mods
 ```text
 .claude-plugin/
 ├── plugin.json        mod 이름, 버전, 타입 파일
-└── marketplace.json   로컬 marketplace 정의
+└── marketplace.json   marketplace 정의 (저장소 루트를 mod 로 제공)
 hooks/
 ├── hooks.json         로드할 모듈 (register.tsx)
 ├── register.tsx       세션 기록, 컨텍스트, register_session 도구, /session-map 명령, 패널
@@ -223,7 +223,7 @@ GitHub Flow 를 따른다. 이 절이 이 저장소의 브랜치 전략 정본�
 | --- | --- |
 | 일반 작업 | 최신 `main` 에서 `<type>/<주제>` 브랜치를 만든다 (예: `feat/task-tab`). 워크트리는 `.worktree/<type>-<주제>` 에 둔다. PR 대상은 `main` 이고 Merge commit 으로 머지한다. `main` 에 직접 push 하지 않는다. |
 | 긴급 수정 | 운영 브랜치가 따로 없다. 일반 작업과 같이 `main` → `fix/<주제>` → `main` PR 로 처리한다. |
-| 배포 | 로컬 marketplace 가 이 폴더를 그대로 읽으므로 배포 트리거가 없다. 릴리즈할 때 `.claude-plugin/plugin.json` 의 `version` 을 올린 `main` 커밋에 `vX.Y.Z` 태그를 붙인다. 롤백은 되돌리는 커밋을 PR 로 머지한다. |
+| 배포 | GitHub 저장소가 marketplace 다. `main` 에 머지되고 `version` 이 올라가면, 사용자는 `claude plugin marketplace update`·`claude plugin update` 로 새 버전을 받는다. 릴리즈할 때 `.claude-plugin/plugin.json` 의 `version` 을 올린 `main` 커밋에 `vX.Y.Z` 태그를 붙인다. 롤백은 되돌리는 커밋을 PR 로 머지한다. |
 | 미정·충돌 | 이 절과 다른 지시가 있거나 정하지 않은 항목이 있으면 브랜치 생성·PR·머지 전에 확인한다. |
 
 ## 마일스톤
