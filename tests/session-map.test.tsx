@@ -1,40 +1,69 @@
 import { expect, test } from 'claude-code/testing'
 
-const NOW = Date.now()
-const entry = (id: string, title: string, purpose: string, parentId: string, status: string, ago: number) =>
-  JSON.stringify({ id, title, purpose, parentId, cwd: '/Users/me/Documents/Github/pay-api', startedAt: NOW - ago - 1000, lastSeen: NOW - ago, status })
+import { ENTRIES, HOSTS } from './fixtures'
 
-const FILES: Record<string, string> = {
-  'a.json': entry('47ffc6fb-1bc9', '결제 API 리팩터링', '결제 모듈의 중복 코드를 정리한다', '', 'active', 1000),
-  'b.json': entry('90af269e-3771', '결제 API 테스트 보강', '리팩터링한 결제 모듈에 테스트를 추가한다', '47ffc6fb-1bc9', 'active', 2000),
-  'c.json': entry('5d21aa03-9f10', '테스트 픽스처 정리', '중복 픽스처를 한 파일로 모은다', '90af269e-3771', 'ended', 60_000),
-  'd.json': entry('c8e04b7a-2a6e', '세션 맵 mod', '모든 세션이 공유하는 세션 목록을 만든다', '', 'active', 30 * 60_000),
-}
+const PANE = {
+  plugin: 'session-map',
+  component: 'Pane',
+  requestId: 'session-map',
+  props: { title: '세션 맵', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+} as const
 
-test('the pane draws sessions as a parent and child tree', async ($, on) => {
+const FILES = Object.fromEntries(ENTRIES.map(one => [`${one.id}.json`, JSON.stringify({ ...one, lastSeen: Date.now() })]))
+
+function engine(on: Parameters<Parameters<typeof test>[1]>[1], opened: string[]) {
   on('command.register', () => ({ value: { command: 'session-map' } }))
   on('tool.register', () => ({ value: undefined }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('env.get', (_, e) => ({ value: (e as { name?: string }).name === 'HOME' ? '/Users/me' : '/reg' }))
-  on('session.id', () => ({ value: '47ffc6fb-1bc9' }))
-  on('session.cwd', () => ({ value: '/Users/me/Documents/Github/pay-api' }))
-  on('fs.write', () => ({ value: undefined }))
-  on('fs.list', () => ({ value: Object.keys(FILES).map(name => ({ name, kind: 'file', size: 1, mtimeMs: NOW, isLink: false })) }))
-  on('fs.read', (_, e) => {
-    const path = String((e as { path?: string }).path)
-    return { value: FILES[path.split('/').pop() ?? ''] ?? '' }
+  on('env.get', (_, e) => {
+    const name = (e as { name?: string }).name
+    return { value: name === 'CLAUDE_CODE_HOST_SESSION_ID' ? 'local_c' : name === 'HOME' ? '/Users/me' : '/reg' }
   })
+  on('session.id', () => ({ value: 'cli-c' }))
+  on('session.cwd', () => ({ value: '/w/mi' }))
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: Object.keys(FILES).map(name => ({ name, kind: 'file', size: 1, mtimeMs: 0, isLink: false })) }))
+  on('fs.read', (_, e) => ({ value: FILES[String((e as { path?: string }).path).split('/').pop() ?? ''] ?? '' }))
+  on('process.run', (_, e) => {
+    opened.push(String((e as { argv?: string[] }).argv?.[1]))
+    return { value: { stdout: '', stderr: '', code: 0 } }
+  })
+  on('tool.call', (_, e) => {
+    const call = e as { tool: string }
+    if (call.tool === 'mcp__ccd_session_mgmt__list_sessions') return { result: { text: JSON.stringify(HOSTS.filter(one => one.sessionId !== 'local_c')) } }
+    if (call.tool === 'mcp__ccd_session_mgmt__get_session') return { result: { text: JSON.stringify(HOSTS.find(one => one.sessionId === 'local_c')) } }
+    return { result: {} }
+  })
+  on('command.run', () => ({ text: '' }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+}
 
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  const ui = await $.ui.mount({
-    plugin: 'session-map',
-    component: 'Pane',
-    requestId: 'session-map',
-    surface: 'terminal',
-    props: { title: '세션 목록', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
-  } as never)
-  const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text)
-  expect(texts.some(text => /└─ .*결제 API 테스트 보강/.test(text ?? ''))).toBe(true)
+test('the pane lists projects, opens a flow, and a title opens its session', async ($, on) => {
+  const opened: string[] = []
+  engine(on, opened)
+  await $.session.start({ cwd: '/w/mi', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'session-map', args: '' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const project = await ui.find({ type: 'Button', text: /2610_커스텀-대시보드/ })
+  expect(project).toBeDefined()
+  await ui.press(project!)
+
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  const title = await ui.find({ type: 'Button', text: /백엔드 상세 설계 보완안/ })
+  await ui.press(title!)
+  expect(opened).toEqual(['claude://claude.ai/epitaxy/local_b'])
+  expect(await ui.find({ type: 'Text', text: /지금: 모델별 단가 표 작성 중/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the terminal draws the flow as text', async ($, on) => {
+  engine(on, [])
+  await $.session.start({ cwd: '/w/mi', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'session-map', args: '' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press((await ui.find({ type: 'Button', text: /2610_커스텀-대시보드/ }))!)
+  expect(await ui.find({ type: 'Text', text: /└─▶ ● AI 비용 추정/ })).toBeDefined()
   await ui.unmount()
 })
