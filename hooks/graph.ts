@@ -158,7 +158,7 @@ export function layoutFlow(nodes: FlowNode[], project: string): Flow {
 }
 
 const NODE_W = 220
-const NODE_H = 58
+const NODE_H = 74
 const GAP_X = 56
 const GAP_Y = 18
 const PAD = 12
@@ -167,8 +167,32 @@ function escape(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+/** 글자 폭 어림값. 한글·한자 같은 넓은 글자는 글자 크기만큼, 나머지는 그 0.6배로 본다 */
+function charWidth(char: string, size: number): number {
+  return /[ᄀ-ᇿ⺀-꓏가-힯豈-﫿＀-￯]/.test(char) ? size : size * 0.6
+}
+
+function textWidth(text: string, size: number): number {
+  return [...text].reduce((sum, char) => sum + charWidth(char, size), 0)
+}
+
+/** 글자를 칸 폭에 맞춰 최대 maxLines 줄로 나눈다. 넘치면 마지막 줄 끝을 …로 줄인다 */
+export function fitLines(text: string, size: number, width: number, maxLines: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const char of text.replace(/\s+/g, ' ').trim()) {
+    if (line && textWidth(line + char, size) > width) {
+      lines.push(line.trimEnd())
+      line = char === ' ' ? '' : char
+    } else {
+      line += char
+    }
+  }
+  if (line) lines.push(line)
+  if (lines.length <= maxLines) return lines
+  let last = lines[maxLines - 1]
+  while (last && textWidth(`${last}…`, size) > width) last = last.slice(0, -1)
+  return [...lines.slice(0, maxLines - 1), `${last.trimEnd()}…`]
 }
 
 /** 플로우를 SVG 로 그린다. 시작 관계는 실선 화살표, 곁가지 관계와 다른 프로젝트 세션은 점선이다 */
@@ -203,8 +227,10 @@ export function flowSvg(flow: Flow, selfKey: string): string {
         `<g><title>${escape(`${node.title}\n${node.purpose}\n${node.now}`)}</title>`,
         `<rect x="${p.x}" y="${p.y}" width="${NODE_W}" height="${NODE_H}" rx="8" fill="${external ? '#f8f9fa' : '#ffffff'}" stroke="${border}" stroke-width="${node.key === selfKey ? 2 : 1}"${dash}/>`,
         `<circle cx="${p.x + 14}" cy="${p.y + 19}" r="5" fill="${color}"/>`,
-        `<text x="${p.x + 26}" y="${p.y + 23}" font-size="13" font-weight="600" fill="#212529">${escape(clip(node.title, 22))}</text>`,
-        `<text x="${p.x + 12}" y="${p.y + 44}" font-size="11" fill="#495057">${escape(clip(sub, 30))}</text>`,
+        `<text x="${p.x + 26}" y="${p.y + 23}" font-size="13" font-weight="600" fill="#212529">${escape(fitLines(node.title, 13, NODE_W - 36, 1)[0] ?? '')}</text>`,
+        ...fitLines(sub, 11, NODE_W - 24, 2).map(
+          (line, i) => `<text x="${p.x + 12}" y="${p.y + 46 + i * 15}" font-size="11" fill="#495057">${escape(line)}</text>`,
+        ),
         `</g>`,
       ].join('')
     })

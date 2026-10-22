@@ -53,7 +53,7 @@ test('the pane lists projects, opens a flow, and a title opens its session', asy
   const title = await ui.find({ type: 'Button', text: /백엔드 상세 설계 보완안/ })
   await ui.press(title!)
   expect(opened).toEqual(['claude://claude.ai/epitaxy/local_b'])
-  expect(await ui.find({ type: 'Text', text: /지금: 모델별 단가 표 작성 중/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /지금: 모델별 단가 표를 정리하고/ })).toBeDefined()
   await ui.unmount()
 })
 

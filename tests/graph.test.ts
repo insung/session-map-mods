@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { flowSvg, layoutFlow, projects, toNodes } from '../hooks/graph'
+import { fitLines, flowSvg, layoutFlow, projects, toNodes } from '../hooks/graph'
 import { ENTRIES, HOSTS, NOW } from './fixtures'
 
 const nodes = toNodes(ENTRIES, HOSTS, NOW)
@@ -42,4 +42,14 @@ test('the flow draws as an svg with one box per session', async () => {
   expect(svg.startsWith('<svg')).toBe(true)
   expect(svg.match(/<rect /g)?.length).toBe(6)
   expect(svg).toContain('stroke-dasharray')
+})
+
+test('long text is cut to the box width, at most two lines', async () => {
+  const recap = 'session-map-mods 에 프로젝트별 세션 플로우, 다른 프로젝트 세션 연결, 제목을 누르면 그 세션으로 이동하는 기능을 넣고 테스트 7개를 통과시켰다'
+  const lines = fitLines(recap, 11, 196, 2)
+  expect(lines).toHaveLength(2)
+  expect(lines[1].endsWith('…')).toBe(true)
+  // 한글은 글자 크기만큼 넓어, 한 줄에 17자(11px × 17 = 187px)를 넘지 않는다
+  expect(fitLines('가'.repeat(40), 11, 196, 2)[0]).toBe('가'.repeat(17))
+  expect(fitLines('짧은 설명', 11, 196, 2)).toEqual(['짧은 설명'])
 })

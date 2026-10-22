@@ -23,7 +23,7 @@ const entry = (id: string, hostId: string, purpose: string, now: string, started
 export const ENTRIES: SessionEntry[] = [
   entry('cli-a', 'local_a', '대시보드 기획서를 검토한다', '기획 검토 의견 반영 완료', 300),
   entry('cli-b', 'local_b', '백엔드 설계를 보완한다', '구성도와 보완안 정리 완료', 250),
-  entry('cli-c', 'local_c', 'AI 호출 비용을 추정한다', '모델별 단가 표 작성 중', 200),
+  entry('cli-c', 'local_c', 'AI 호출 비용을 추정한다', '모델별 단가 표를 정리하고 일일 리포트 배치에 비용 집계를 넣기 위해 하위 세션을 만들어 쿼리를 검증하는 중', 200),
   entry('cli-x', 'local_x', '배치에 비용 집계를 넣는다', '집계 쿼리 검증 중', 20),
   entry('cli-d', 'local_d', '위젯 화면 시안을 만든다', '카드형 시안 2안 비교', 100),
   entry('cli-e', 'local_e', '패널이 위젯 시안 작업 중 깨진 것을 고친다', '원인 파악: 긴 제목 줄바꿈', 40, ['local_d']),
